@@ -15,7 +15,11 @@ The example of Banuba SDK and Agora.io SDK integration to enable augmented reali
 ## Help Resources
  - https://docs.banuba.com/face-ar-sdk/unity/unity_getting_started
  - https://www.agora.io/en/blog/agora-video-sdk-for-unity-quick-start-programming-guide/
- - 
+
+## Developer Environment Requirements
+
+Minimum Unity Editor Version: 2019.3.10f1
+
 ## License
 
 MIT
