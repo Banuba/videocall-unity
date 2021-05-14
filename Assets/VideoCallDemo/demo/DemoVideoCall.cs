@@ -62,11 +62,11 @@ public class DemoVideoCall : MonoBehaviour
             externalVideoFrame.buffer = bytes;
             externalVideoFrame.stride = mTexture.width;
             externalVideoFrame.height = mTexture.height;
-            externalVideoFrame.cropLeft = 10;
-            externalVideoFrame.cropTop = 10;
-            externalVideoFrame.cropRight = 10;
-            externalVideoFrame.cropBottom = 10;
-            externalVideoFrame.rotation = 0;
+            externalVideoFrame.cropLeft = 0;
+            externalVideoFrame.cropTop = 0;
+            externalVideoFrame.cropRight = 0;
+            externalVideoFrame.cropBottom = 0;
+            externalVideoFrame.rotation = 180;
             externalVideoFrame.timestamp = i++;
             int a = rtc.PushVideoFrame(externalVideoFrame);
             if (a != 0)
