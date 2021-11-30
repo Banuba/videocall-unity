@@ -1,6 +1,9 @@
-# videocall-unity
-The example of Banuba SDK and Agora.io SDK integration to enable augmented reality filters in video calls for Unity.
+# Face AR SDK for Unity Videocall example  
+
+The example of Banuba SDK and Agora.io SDK integration to enable augmented reality filters in video calls for Unity.  
+
 ## Getting Started
+
 1) Get the latest Banuba SDK archive for Unity and the client token. Please fill in our form on banuba.com website, or contact us via info@banuba.com. Copy and Past BanubaSDK/Assets folder to the videocall-unity/Assets/BanubaSDK folder.
 2) Download the Agora SDK package in either of the following two ways:
     - From Unity Asset Store download and import the Agora Video SDK
@@ -13,6 +16,7 @@ The example of Banuba SDK and Agora.io SDK integration to enable augmented reali
 8) Run the project in the Editor.
 
 ## Help Resources
+
  - https://docs.banuba.com/face-ar-sdk-v1/unity/unity_getting_started
  - https://www.agora.io/en/blog/agora-video-sdk-for-unity-quick-start-programming-guide/
 
