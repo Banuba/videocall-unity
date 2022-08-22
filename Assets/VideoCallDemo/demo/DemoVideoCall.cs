@@ -19,11 +19,13 @@ public class DemoVideoCall : MonoBehaviour
     [SerializeField]
     private Text _logText;
     [SerializeField]
-    private Button _muteButton;
-    [SerializeField]
     private RawImage _localCameraImage;
     [SerializeField]
+    private Transform _layout;
+    [SerializeField]
     private BNB.RenderToTexture _renderToTexture;
+    [SerializeField] 
+    private Vector2 _cameraViewSize;
 
     private int _timestamp;
     private Logger _logger;
@@ -49,7 +51,7 @@ public class DemoVideoCall : MonoBehaviour
         yield return new WaitForEndOfFrame();
         IRtcEngine rtc = IRtcEngine.QueryEngine();
         if (rtc == null) yield break;
-
+        
         byte[] bytes = GetTextureData(_renderToTexture.texture);
         ExternalVideoFrame externalVideoFrame = new ExternalVideoFrame
         {
@@ -75,7 +77,7 @@ public class DemoVideoCall : MonoBehaviour
     private byte[] GetTextureData(RenderTexture renderTexture)
     {
         RenderTexture.active = renderTexture;
-        _bufferTexture.ReadPixels(new Rect(1, 1, _bufferTexture.width, _bufferTexture.height), 0, 0);
+        _bufferTexture.ReadPixels(new Rect(0, 0, _bufferTexture.width, _bufferTexture.height), 0, 0);
         _bufferTexture.Apply();
         RenderTexture.active = null;
         return _bufferTexture.GetRawTextureData();
@@ -119,9 +121,20 @@ public class DemoVideoCall : MonoBehaviour
         _mRtcEngine.OnConnectionLost += OnConnectionLostHandler;
         _mRtcEngine.OnUserJoined += OnUserJoinedHandler;
         _mRtcEngine.OnUserOffline += OnUserOfflineHandler;
-	}
+    }
+    
+    private void OnDestroy()
+    {
+        _mRtcEngine.OnJoinChannelSuccess -= OnJoinChannelSuccessHandler;
+        _mRtcEngine.OnLeaveChannel -= OnLeaveChannelHandler;
+        _mRtcEngine.OnWarning -= OnSDKWarningHandler;
+        _mRtcEngine.OnError -= OnSDKErrorHandler;
+        _mRtcEngine.OnConnectionLost -= OnConnectionLostHandler;
+        _mRtcEngine.OnUserJoined -= OnUserJoinedHandler;
+        _mRtcEngine.OnUserOffline -= OnUserOfflineHandler;
+    }
 
-	private void JoinChannel()
+    private void JoinChannel()
 	{
         int ret = _mRtcEngine.JoinChannelByKey(TOKEN, CHANNEL_NAME, "", 0);
         Debug.Log($"JoinChannel ret: ${ret}");
@@ -208,16 +221,14 @@ public class DemoVideoCall : MonoBehaviour
         {
             name = uid
         };
-        go.AddComponent<RawImage>();
+        RawImage imageComponent = go.AddComponent<RawImage>();
+        imageComponent.rectTransform.sizeDelta = _cameraViewSize;
         go.AddComponent<UIElementDrag>();
-
-        go.transform.SetParent(transform);
+        
+        go.transform.SetParent(_layout);
         go.transform.Rotate(0f, 0.0f, 180.0f);
-
-        float xPos = Random.Range(_offset - Screen.width / 2f, Screen.width / 2f - _offset);
-        float yPos = Random.Range(_offset, Screen.height / 2f - _offset);
-        go.transform.localPosition = new Vector3(xPos, yPos, 0f);
-
+        go.transform.localScale = Vector3.one;
+        
         VideoSurface videoSurface = go.AddComponent<VideoSurface>();
         return videoSurface;
     }
