@@ -19,6 +19,8 @@ public class DemoVideoCall : MonoBehaviour
     [SerializeField]
     private Text _logText;
     [SerializeField]
+    private Button _muteButton;
+    [SerializeField]
     private RawImage _localCameraImage;
     [SerializeField]
     private BNB.RenderToTexture _renderToTexture;
@@ -170,6 +172,11 @@ public class DemoVideoCall : MonoBehaviour
         _mRtcEngine.DisableVideoObserver();
         IRtcEngine.Destroy();
         _mRtcEngine = null;
+    }
+    
+    public void OnMuteToggle(bool toggleState)
+    {
+        _mRtcEngine.MuteLocalAudioStream(toggleState);
     }
 
     private void DestroyVideoView(uint uid)
