@@ -125,6 +125,9 @@ public class DemoVideoCall : MonoBehaviour
     
     private void OnDestroy()
     {
+        if (_mRtcEngine == null) return;
+        _mRtcEngine.LeaveChannel();
+        _mRtcEngine.DisableVideoObserver();
         _mRtcEngine.OnJoinChannelSuccess -= OnJoinChannelSuccessHandler;
         _mRtcEngine.OnLeaveChannel -= OnLeaveChannelHandler;
         _mRtcEngine.OnWarning -= OnSDKWarningHandler;
@@ -132,6 +135,8 @@ public class DemoVideoCall : MonoBehaviour
         _mRtcEngine.OnConnectionLost -= OnConnectionLostHandler;
         _mRtcEngine.OnUserJoined -= OnUserJoinedHandler;
         _mRtcEngine.OnUserOffline -= OnUserOfflineHandler;
+        IRtcEngine.Destroy();
+        _mRtcEngine = null;
     }
 
     private void JoinChannel()
@@ -178,15 +183,6 @@ public class DemoVideoCall : MonoBehaviour
         _logger.UpdateLog("OnConnectionLost ");
     }
 
-    private void OnApplicationQuit()
-    {
-        if (_mRtcEngine == null) return;
-        _mRtcEngine.LeaveChannel();
-        _mRtcEngine.DisableVideoObserver();
-        IRtcEngine.Destroy();
-        _mRtcEngine = null;
-    }
-    
     public void OnMuteToggle(bool toggleState)
     {
         _mRtcEngine.MuteLocalAudioStream(toggleState);
