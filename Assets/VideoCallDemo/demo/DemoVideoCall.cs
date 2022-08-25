@@ -1,259 +1,230 @@
 ﻿using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using agora_gaming_rtc;
 using UnityEngine.UI;
-using System.Runtime.InteropServices;
-using agora_utilities;
+using AgoraUtilities;
 
 public class DemoVideoCall : MonoBehaviour 
 {
-
+    private const string _channelName = "Agora_Channel";
+    private const float _offset = 100;
+    
     [SerializeField]
     private string APP_ID = "YOUR_APPID";
-
     [SerializeField]
     private string TOKEN = "";
-
     [SerializeField]
     private string CHANNEL_NAME = "YOUR_CHANNEL_NAME";
-   	public Text logText;
-    private Logger logger;
-	public IRtcEngine mRtcEngine = null;
-	private static string channelName = "Agora_Channel";
-	private const float Offset = 100;
-	public Texture2D mTexture;
-    private Rect mRect;	
-	private int i = 0;
-    public RawImage rawImage;
-    public BNB.RenderToTexture renderTexture;
+    
+    [SerializeField]
+    private Text _logText;
+    [SerializeField]
+    private RawImage _localCameraImage;
+    [SerializeField]
+    private Transform _layout;
+    [SerializeField]
+    private BNB.RenderToTexture _renderToTexture;
+    [SerializeField] 
+    private Vector2 _cameraViewSize;
 
-    // Use this for initialization
-    void Start () 
-	{
+    private int _timestamp;
+    private Logger _logger;
+    private IRtcEngine _mRtcEngine;
+    private Texture2D _bufferTexture;
+
+    private void Start ()
+    {
         InitTexture();
 		CheckAppId();	
 		InitEngine();
 		JoinChannel();
-	}
-
-    void Update() 
-    {
         PermissionHelper.RequestMicrophontPermission();
-		StartCoroutine(sendVideoFrame());
+    }
+    
+    private void Update()
+    {
+        StartCoroutine(SendVideoFrame());
     }
 
-    IEnumerator sendVideoFrame()
+    private IEnumerator SendVideoFrame()
     {
         yield return new WaitForEndOfFrame();
         IRtcEngine rtc = IRtcEngine.QueryEngine();
-        if (rtc != null)
+        if (rtc == null) yield break;
+        
+        byte[] bytes = GetTextureData(_renderToTexture.texture);
+        ExternalVideoFrame externalVideoFrame = new ExternalVideoFrame
         {
-            RenderTexture.active = renderTexture.texture;
-            mTexture.ReadPixels(new Rect(0, 0, mTexture.width, mTexture.height), 0, 0);
-            mTexture.Apply();
-            RenderTexture.active = null;
-
-            byte[] bytes = mTexture.GetRawTextureData();
-            int size = Marshal.SizeOf(bytes[0]) * bytes.Length;
-            ExternalVideoFrame externalVideoFrame = new ExternalVideoFrame();
-            externalVideoFrame.type = ExternalVideoFrame.VIDEO_BUFFER_TYPE.VIDEO_BUFFER_RAW_DATA;
-            externalVideoFrame.format = ExternalVideoFrame.VIDEO_PIXEL_FORMAT.VIDEO_PIXEL_ARGB;
-            externalVideoFrame.buffer = bytes;
-            externalVideoFrame.stride = mTexture.width;
-            externalVideoFrame.height = mTexture.height;
-            externalVideoFrame.cropLeft = 0;
-            externalVideoFrame.cropTop = 0;
-            externalVideoFrame.cropRight = 0;
-            externalVideoFrame.cropBottom = 0;
-            externalVideoFrame.rotation = 180;
-            externalVideoFrame.timestamp = i++;
-            int a = rtc.PushVideoFrame(externalVideoFrame);
-            if (a != 0)
-            {
-                Debug.Log("PushVideoFrame ret = " + a);
-            }
-            
-
+            type = ExternalVideoFrame.VIDEO_BUFFER_TYPE.VIDEO_BUFFER_RAW_DATA,
+            format = ExternalVideoFrame.VIDEO_PIXEL_FORMAT.VIDEO_PIXEL_ARGB,
+            buffer = bytes,
+            stride = _renderToTexture.texture.width,
+            height = _renderToTexture.texture.height,
+            cropLeft = 0,
+            cropTop = 0,
+            cropRight = 0,
+            cropBottom = 0,
+            rotation = 180,
+            timestamp = _timestamp++
+        };
+        var result = rtc.PushVideoFrame(externalVideoFrame);
+        if (result != 0)
+        {
+            Debug.Log("PushVideoFrame failure");
         }
     }
 
-	void InitEngine()
-	{
-        mRtcEngine = IRtcEngine.GetEngine(APP_ID);
-		mRtcEngine.SetLogFile("log.txt");
-		mRtcEngine.SetChannelProfile(CHANNEL_PROFILE.CHANNEL_PROFILE_LIVE_BROADCASTING);
-		mRtcEngine.SetClientRole(CLIENT_ROLE_TYPE.CLIENT_ROLE_BROADCASTER);
-		mRtcEngine.EnableAudio();
-		mRtcEngine.EnableVideo();
-		mRtcEngine.EnableVideoObserver();
-		mRtcEngine.SetExternalVideoSource(true, false);
-        mRtcEngine.OnJoinChannelSuccess += OnJoinChannelSuccessHandler;
-        mRtcEngine.OnLeaveChannel += OnLeaveChannelHandler;
-        mRtcEngine.OnWarning += OnSDKWarningHandler;
-        mRtcEngine.OnError += OnSDKErrorHandler;
-        mRtcEngine.OnConnectionLost += OnConnectionLostHandler;
-        mRtcEngine.OnUserJoined += OnUserJoinedHandler;
-        mRtcEngine.OnUserOffline += OnUserOfflineHandler;
-	}
-
-	void JoinChannel()
-	{
-        int ret = mRtcEngine.JoinChannelByKey(TOKEN, CHANNEL_NAME, "", 0);
-        Debug.Log(string.Format("JoinChannel ret: ${0}", ret));
-	}
-
-	void CheckAppId()
+    private byte[] GetTextureData(RenderTexture renderTexture)
     {
-        logger = new Logger(logText);
-        logger.DebugAssert(APP_ID.Length > 10, "Please fill in your appId in Canvas!!!!");
+        RenderTexture.active = renderTexture;
+        _bufferTexture.ReadPixels(new Rect(0, 0, _bufferTexture.width, _bufferTexture.height), 0, 0);
+        _bufferTexture.Apply();
+        RenderTexture.active = null;
+        return _bufferTexture.GetRawTextureData();
     }
 
-    void InitTexture()
+    private void InitTexture()
     {
-        if(renderTexture == null)
+        if(_renderToTexture == null)
         {
-            Debug.Log("You'll need to asign render texture first");
+            Debug.LogWarning("Assign RenderToTexture");
         }
-        mRect = new Rect(0, 0, renderTexture.texture.width, renderTexture.texture.height);
-        mTexture = new Texture2D((int)mRect.width, (int)mRect.height, TextureFormat.ARGB32, false);
-        rawImage.texture = mTexture;
+
+        if (_bufferTexture != null)
+        {
+            Destroy(_bufferTexture);
+        }
+        _bufferTexture = new Texture2D(_renderToTexture.texture.width, _renderToTexture.texture.height, TextureFormat.ARGB32, false);
+        _localCameraImage.texture = _bufferTexture;
     }
-	
-	void OnJoinChannelSuccessHandler(string channelName, uint uid, int elapsed)
+    
+    private void CheckAppId()
     {
-        logger.UpdateLog(string.Format("sdk version: ${0}", IRtcEngine.GetSdkVersion()));
-        logger.UpdateLog(string.Format("onJoinChannelSuccess channelName: {0}, uid: {1}, elapsed: {2}", channelName, uid, elapsed));
+        _logger = new Logger(_logText);
+        _logger.DebugAssert(APP_ID.Length > 10, "Please fill in your appId in Canvas.");
     }
 
-    void OnLeaveChannelHandler(RtcStats stats)
+	private void InitEngine()
+	{
+        _mRtcEngine = IRtcEngine.GetEngine(APP_ID);
+		_mRtcEngine.SetLogFile("log.txt");
+		_mRtcEngine.SetChannelProfile(CHANNEL_PROFILE.CHANNEL_PROFILE_LIVE_BROADCASTING);
+		_mRtcEngine.SetClientRole(CLIENT_ROLE_TYPE.CLIENT_ROLE_BROADCASTER);
+		_mRtcEngine.EnableAudio();
+		_mRtcEngine.EnableVideo();
+		_mRtcEngine.EnableVideoObserver();
+		_mRtcEngine.SetExternalVideoSource(true, false);
+        _mRtcEngine.OnJoinChannelSuccess += OnJoinChannelSuccessHandler;
+        _mRtcEngine.OnLeaveChannel += OnLeaveChannelHandler;
+        _mRtcEngine.OnWarning += OnSDKWarningHandler;
+        _mRtcEngine.OnError += OnSDKErrorHandler;
+        _mRtcEngine.OnConnectionLost += OnConnectionLostHandler;
+        _mRtcEngine.OnUserJoined += OnUserJoinedHandler;
+        _mRtcEngine.OnUserOffline += OnUserOfflineHandler;
+    }
+    
+    private void OnDestroy()
     {
-        logger.UpdateLog("OnLeaveChannelSuccess");
+        if (_mRtcEngine == null) return;
+        _mRtcEngine.LeaveChannel();
+        _mRtcEngine.DisableVideoObserver();
+        _mRtcEngine.OnJoinChannelSuccess -= OnJoinChannelSuccessHandler;
+        _mRtcEngine.OnLeaveChannel -= OnLeaveChannelHandler;
+        _mRtcEngine.OnWarning -= OnSDKWarningHandler;
+        _mRtcEngine.OnError -= OnSDKErrorHandler;
+        _mRtcEngine.OnConnectionLost -= OnConnectionLostHandler;
+        _mRtcEngine.OnUserJoined -= OnUserJoinedHandler;
+        _mRtcEngine.OnUserOffline -= OnUserOfflineHandler;
+        IRtcEngine.Destroy();
+        _mRtcEngine = null;
     }
 
-    void OnUserJoinedHandler(uint uid, int elapsed)
+    private void JoinChannel()
+	{
+        int ret = _mRtcEngine.JoinChannelByKey(TOKEN, CHANNEL_NAME, "", 0);
+        Debug.Log($"JoinChannel ret: ${ret}");
+	}
+    
+	private void OnJoinChannelSuccessHandler(string channelName, uint uid, int elapsed)
     {
-        logger.UpdateLog(string.Format("OnUserJoined uid: ${0} elapsed: ${1}", uid, elapsed));
-        makeVideoView(uid);
+        _logger.UpdateLog($"SDK version: ${IRtcEngine.GetSdkVersion()}");
+        _logger.UpdateLog($"onJoinChannelSuccess channelName: {channelName}, uid: {uid}, elapsed: {elapsed}");
     }
 
-    void OnUserOfflineHandler(uint uid, USER_OFFLINE_REASON reason)
+    private void OnLeaveChannelHandler(RtcStats stats)
     {
-        logger.UpdateLog(string.Format("OnUserOffLine uid: ${0}, reason: ${1}", uid, (int)reason));
+        _logger.UpdateLog("OnLeaveChannelSuccess");
+    }
+
+    private void OnUserJoinedHandler(uint uid, int elapsed)
+    {
+        _logger.UpdateLog($"OnUserJoined uid: ${uid} elapsed: ${elapsed}");
+        MakeVideoView(uid);
+    }
+
+    private void OnUserOfflineHandler(uint uid, USER_OFFLINE_REASON reason)
+    {
+        _logger.UpdateLog($"OnUserOffLine uid: ${uid}, reason: ${(int)reason}");
         DestroyVideoView(uid);
     }
 
-    void OnSDKWarningHandler(int warn, string msg)
+    private void OnSDKWarningHandler(int warn, string msg)
     {
-        logger.UpdateLog(string.Format("OnSDKWarning warn: {0}, msg: {1}", warn, msg));
+        _logger.UpdateLog($"OnSDKWarning warn: {warn}, msg: {msg}");
     }
     
-    void OnSDKErrorHandler(int error, string msg)
+    private void OnSDKErrorHandler(int error, string msg)
     {
-        logger.UpdateLog(string.Format("OnSDKError error: {0}, msg: {1}", error, msg));
+        _logger.UpdateLog($"OnSDKError error: {error}, msg: {msg}");
     }
     
-    void OnConnectionLostHandler()
+    private void OnConnectionLostHandler()
     {
-        logger.UpdateLog(string.Format("OnConnectionLost "));
+        _logger.UpdateLog("OnConnectionLost ");
     }
 
-    void OnApplicationQuit()
+    public void OnMuteToggle(bool toggleState)
     {
-        if (mRtcEngine != null)
-        {
-			mRtcEngine.LeaveChannel();
-			mRtcEngine.DisableVideoObserver();
-            IRtcEngine.Destroy();
-            mRtcEngine = null;
-        }
+        _mRtcEngine.MuteLocalAudioStream(toggleState);
     }
 
     private void DestroyVideoView(uint uid)
     {
         GameObject go = GameObject.Find(uid.ToString());
-        if (!ReferenceEquals(go, null))
+        if (go != null)
         {
             Destroy(go);
         }
     }
 
-    private void makeVideoView(uint uid)
+    private void MakeVideoView(uint uid)
     {
         GameObject go = GameObject.Find(uid.ToString());
-        if (!ReferenceEquals(go, null))
+        if (go != null)
         {
             return; // reuse
         }
-
-        // create a GameObject and assign to this new user
-        VideoSurface videoSurface = makeImageSurface(uid.ToString());
-        if (!ReferenceEquals(videoSurface, null))
-        {
-            // configure videoSurface
-            videoSurface.SetForUser(uid);
-            videoSurface.SetEnable(true);
-            videoSurface.SetVideoSurfaceType(AgoraVideoSurfaceType.RawImage);
-            videoSurface.SetGameFps(30);
-        }
-    }
-
-    // VIDEO TYPE 1: 3D Object
-    public VideoSurface makePlaneSurface(string goName)
-    {
-        GameObject go = GameObject.CreatePrimitive(PrimitiveType.Plane);
-
-        if (go == null)
-        {
-            return null;
-        }
-        go.name = goName;
-        // set up transform
-        go.transform.Rotate(-90.0f, 0.0f, 0.0f);
-        float yPos = Random.Range(3.0f, 5.0f);
-        float xPos = Random.Range(-2.0f, 2.0f);
-        go.transform.position = new Vector3(xPos, yPos, 0f);
-        go.transform.localScale = new Vector3(0.25f, 0.5f, .5f);
-
         // configure videoSurface
-        VideoSurface videoSurface = go.AddComponent<VideoSurface>();
-        return videoSurface;
+        VideoSurface videoSurface = CreateVideoSurface(uid.ToString());
+        videoSurface.SetForUser(uid);
+        videoSurface.SetVideoSurfaceType(AgoraVideoSurfaceType.RawImage);
+        videoSurface.videoFps = 30;
     }
 
-    // Video TYPE 2: RawImage
-    public VideoSurface makeImageSurface(string goName)
+    private VideoSurface CreateVideoSurface(string uid)
     {
-        GameObject go = new GameObject();
-
-        if (go == null)
+        GameObject go = new GameObject
         {
-            return null;
-        }
-
-        go.name = goName;
-        // to be renderered onto
-        go.AddComponent<RawImage>();
-        // make the object draggable
+            name = uid
+        };
+        RawImage imageComponent = go.AddComponent<RawImage>();
+        imageComponent.rectTransform.sizeDelta = _cameraViewSize;
         go.AddComponent<UIElementDrag>();
-        GameObject canvas = GameObject.Find("VideoCanvas");
-        if (canvas != null)
-        {
-            go.transform.parent = canvas.transform;
-            Debug.Log("add video view");
-        }
-        else
-        {
-            Debug.Log("Canvas is null video view");
-        }
-        // set up transform
+        
+        go.transform.SetParent(_layout);
         go.transform.Rotate(0f, 0.0f, 180.0f);
-        float xPos = Random.Range(Offset - Screen.width / 2f, Screen.width / 2f - Offset);
-        float yPos = Random.Range(Offset, Screen.height / 2f - Offset);
-        Debug.Log("position x " + xPos + " y: " + yPos);
-        go.transform.localPosition = new Vector3(xPos, yPos, 0f);
-        go.transform.localScale = new Vector3(3f, 4f, 1f);
-
-        // configure videoSurface
+        go.transform.localScale = Vector3.one;
+        
         VideoSurface videoSurface = go.AddComponent<VideoSurface>();
         return videoSurface;
     }

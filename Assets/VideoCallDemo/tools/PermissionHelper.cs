@@ -5,7 +5,8 @@ using UnityEngine;
 using UnityEngine.Android;
 #endif
 
-public class PermissionHelper{
+public static class PermissionHelper
+{
 
 	public static void RequestMicrophontPermission()
 	{
