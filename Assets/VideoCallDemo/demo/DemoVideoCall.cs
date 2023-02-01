@@ -1,62 +1,109 @@
 ﻿using System.Collections;
 using UnityEngine;
-using agora_gaming_rtc;
 using UnityEngine.UI;
-using AgoraUtilities;
+using UnityEngine.Serialization;
+using Agora.Rtc;
+using Agora.Util;
+using Logger = Agora.Util.Logger;
+
+#if UNITY_2018_1_OR_NEWER
+using Unity.Collections;
+#endif
+
 
 public class DemoVideoCall : MonoBehaviour 
 {
-    private const string _channelName = "Agora_Channel";
-    private const float _offset = 100;
-    
+    [Header("_____________Basic Configuration_____________")]
+    [FormerlySerializedAs("APP_ID")]
     [SerializeField]
-    private string APP_ID = "YOUR_APPID";
+    private string _appID = "";
+
+    [FormerlySerializedAs("TOKEN")]
     [SerializeField]
-    private string TOKEN = "";
+    private string _token = "";
+
+    [FormerlySerializedAs("CHANNEL_NAME")]
     [SerializeField]
-    private string CHANNEL_NAME = "YOUR_CHANNEL_NAME";
-    
+    private string _channelName = "";
+
+    public Text LogText;
+    internal Logger Log;
+    internal IRtcEngine RtcEngine = null;
+
+    [Header("_____________Banuba SDK Refs_____________")]
     [SerializeField]
-    private Text _logText;
-    [SerializeField]
-    private RawImage _localCameraImage;
-    [SerializeField]
-    private Transform _layout;
+    private RawImage _localCameraView;
+
     [SerializeField]
     private BNB.RenderToTexture _renderToTexture;
-    [SerializeField] 
-    private Vector2 _cameraViewSize;
-
-    private int _timestamp;
-    private Logger _logger;
-    private IRtcEngine _mRtcEngine;
     private Texture2D _bufferTexture;
 
-    private void Start ()
+
+    // Use this for initialization
+    private void Start()
     {
-        InitTexture();
-		CheckAppId();	
-		InitEngine();
-		JoinChannel();
-        PermissionHelper.RequestMicrophontPermission();
+        if (CheckAppId())
+        {
+            InitTextureIfRequired();
+            InitEngine();
+            SetExternalVideoSource();
+            JoinChannel();
+        }
     }
-    
+
+    private void InitTextureIfRequired()
+    {
+        if (_renderToTexture == null)
+        {
+            Debug.LogWarning("Assign RenderToTexture");
+        }
+
+        if (_renderToTexture.texture == null)
+        {
+            return;
+        }
+
+        if (_bufferTexture != null && (_bufferTexture.width != _renderToTexture.texture.width || _bufferTexture.height != _renderToTexture.texture.height))
+        {
+            Destroy(_bufferTexture);
+            _bufferTexture = new Texture2D(_renderToTexture.texture.width, _renderToTexture.texture.height, TextureFormat.RGBA32, false);
+            return;
+        }
+        _bufferTexture = new Texture2D(_renderToTexture.texture.width, _renderToTexture.texture.height, TextureFormat.RGBA32, false);
+    }
+
     private void Update()
     {
+        PermissionHelper.RequestMicrophontPermission();
         StartCoroutine(SendVideoFrame());
+        if(_renderToTexture != null)
+        {
+            _localCameraView.texture = _renderToTexture.texture;
+        }
+
+    }
+
+    private byte[] GetTextureData(RenderTexture renderTexture)
+    {
+        RenderTexture.active = renderTexture;
+        _bufferTexture.ReadPixels(new Rect(0, 0, renderTexture.width, renderTexture.height), 0, 0);
+        _bufferTexture.Apply();
+        RenderTexture.active = null;
+        return _bufferTexture.GetRawTextureData();
     }
 
     private IEnumerator SendVideoFrame()
     {
         yield return new WaitForEndOfFrame();
-        IRtcEngine rtc = IRtcEngine.QueryEngine();
+        InitTextureIfRequired();
+        IRtcEngine rtc = Agora.Rtc.RtcEngine.Instance;
         if (rtc == null) yield break;
-        
+
         byte[] bytes = GetTextureData(_renderToTexture.texture);
         ExternalVideoFrame externalVideoFrame = new ExternalVideoFrame
         {
-            type = ExternalVideoFrame.VIDEO_BUFFER_TYPE.VIDEO_BUFFER_RAW_DATA,
-            format = ExternalVideoFrame.VIDEO_PIXEL_FORMAT.VIDEO_PIXEL_ARGB,
+            type = VIDEO_BUFFER_TYPE.VIDEO_BUFFER_RAW_DATA,
+            format = VIDEO_PIXEL_FORMAT.VIDEO_PIXEL_RGBA,
             buffer = bytes,
             stride = _renderToTexture.texture.width,
             height = _renderToTexture.texture.height,
@@ -65,8 +112,8 @@ public class DemoVideoCall : MonoBehaviour
             cropRight = 0,
             cropBottom = 0,
             rotation = 180,
-            timestamp = _timestamp++
-        };
+            timestamp = System.DateTime.Now.Ticks / 10000
+    };
         var result = rtc.PushVideoFrame(externalVideoFrame);
         if (result != 0)
         {
@@ -74,158 +121,212 @@ public class DemoVideoCall : MonoBehaviour
         }
     }
 
-    private byte[] GetTextureData(RenderTexture renderTexture)
+    private void InitEngine()
     {
-        RenderTexture.active = renderTexture;
-        _bufferTexture.ReadPixels(new Rect(0, 0, _bufferTexture.width, _bufferTexture.height), 0, 0);
-        _bufferTexture.Apply();
-        RenderTexture.active = null;
-        return _bufferTexture.GetRawTextureData();
+        RtcEngine = Agora.Rtc.RtcEngine.CreateAgoraRtcEngine();
+        UserEventHandler handler = new UserEventHandler(this);
+        RtcEngineContext context = new RtcEngineContext(_appID, 0,
+            CHANNEL_PROFILE_TYPE.CHANNEL_PROFILE_LIVE_BROADCASTING,
+            AUDIO_SCENARIO_TYPE.AUDIO_SCENARIO_DEFAULT);
+        RtcEngine.Initialize(context);
+        RtcEngine.InitEventHandler(handler);
     }
 
-    private void InitTexture()
+    private void SetExternalVideoSource()
     {
-        if(_renderToTexture == null)
-        {
-            Debug.LogWarning("Assign RenderToTexture");
-        }
-
-        if (_bufferTexture != null)
-        {
-            Destroy(_bufferTexture);
-        }
-        _bufferTexture = new Texture2D(_renderToTexture.texture.width, _renderToTexture.texture.height, TextureFormat.ARGB32, false);
-        _localCameraImage.texture = _bufferTexture;
-    }
-    
-    private void CheckAppId()
-    {
-        _logger = new Logger(_logText);
-        _logger.DebugAssert(APP_ID.Length > 10, "Please fill in your appId in Canvas.");
-    }
-
-	private void InitEngine()
-	{
-        _mRtcEngine = IRtcEngine.GetEngine(APP_ID);
-		_mRtcEngine.SetLogFile("log.txt");
-		_mRtcEngine.SetChannelProfile(CHANNEL_PROFILE.CHANNEL_PROFILE_LIVE_BROADCASTING);
-		_mRtcEngine.SetClientRole(CLIENT_ROLE_TYPE.CLIENT_ROLE_BROADCASTER);
-		_mRtcEngine.EnableAudio();
-		_mRtcEngine.EnableVideo();
-		_mRtcEngine.EnableVideoObserver();
-		_mRtcEngine.SetExternalVideoSource(true, false);
-        _mRtcEngine.OnJoinChannelSuccess += OnJoinChannelSuccessHandler;
-        _mRtcEngine.OnLeaveChannel += OnLeaveChannelHandler;
-        _mRtcEngine.OnWarning += OnSDKWarningHandler;
-        _mRtcEngine.OnError += OnSDKErrorHandler;
-        _mRtcEngine.OnConnectionLost += OnConnectionLostHandler;
-        _mRtcEngine.OnUserJoined += OnUserJoinedHandler;
-        _mRtcEngine.OnUserOffline += OnUserOfflineHandler;
-    }
-    
-    private void OnDestroy()
-    {
-        if (_mRtcEngine == null) return;
-        _mRtcEngine.LeaveChannel();
-        _mRtcEngine.DisableVideoObserver();
-        _mRtcEngine.OnJoinChannelSuccess -= OnJoinChannelSuccessHandler;
-        _mRtcEngine.OnLeaveChannel -= OnLeaveChannelHandler;
-        _mRtcEngine.OnWarning -= OnSDKWarningHandler;
-        _mRtcEngine.OnError -= OnSDKErrorHandler;
-        _mRtcEngine.OnConnectionLost -= OnConnectionLostHandler;
-        _mRtcEngine.OnUserJoined -= OnUserJoinedHandler;
-        _mRtcEngine.OnUserOffline -= OnUserOfflineHandler;
-        IRtcEngine.Destroy();
-        _mRtcEngine = null;
+        var ret = RtcEngine.SetExternalVideoSource(true, false, EXTERNAL_VIDEO_SOURCE_TYPE.VIDEO_FRAME, new SenderOptions());
+        Debug.Log("SetExternalVideoSource returns:" + ret);
     }
 
     private void JoinChannel()
-	{
-        int ret = _mRtcEngine.JoinChannelByKey(TOKEN, CHANNEL_NAME, "", 0);
-        Debug.Log($"JoinChannel ret: ${ret}");
-	}
-    
-	private void OnJoinChannelSuccessHandler(string channelName, uint uid, int elapsed)
     {
-        _logger.UpdateLog($"SDK version: ${IRtcEngine.GetSdkVersion()}");
-        _logger.UpdateLog($"onJoinChannelSuccess channelName: {channelName}, uid: {uid}, elapsed: {elapsed}");
+        RtcEngine.EnableAudio();
+        RtcEngine.EnableVideo();
+        RtcEngine.SetClientRole(CLIENT_ROLE_TYPE.CLIENT_ROLE_BROADCASTER);
+        RtcEngine.JoinChannel(_token, _channelName);
     }
 
-    private void OnLeaveChannelHandler(RtcStats stats)
+    private bool CheckAppId()
     {
-        _logger.UpdateLog("OnLeaveChannelSuccess");
+        Log = new Logger(LogText);
+        return Log.DebugAssert(_appID.Length > 10, "Please fill in your appId in Canvas!!!!");
     }
 
-    private void OnUserJoinedHandler(uint uid, int elapsed)
+    private void OnDestroy()
     {
-        _logger.UpdateLog($"OnUserJoined uid: ${uid} elapsed: ${elapsed}");
-        MakeVideoView(uid);
+        Debug.Log("OnDestroy");
+        if (RtcEngine == null) return;
+        RtcEngine.InitEventHandler(null);
+        RtcEngine.LeaveChannel();
+        RtcEngine.Dispose();
     }
 
-    private void OnUserOfflineHandler(uint uid, USER_OFFLINE_REASON reason)
+    internal string GetChannelName()
     {
-        _logger.UpdateLog($"OnUserOffLine uid: ${uid}, reason: ${(int)reason}");
-        DestroyVideoView(uid);
+        return _channelName;
     }
 
-    private void OnSDKWarningHandler(int warn, string msg)
-    {
-        _logger.UpdateLog($"OnSDKWarning warn: {warn}, msg: {msg}");
-    }
-    
-    private void OnSDKErrorHandler(int error, string msg)
-    {
-        _logger.UpdateLog($"OnSDKError error: {error}, msg: {msg}");
-    }
-    
-    private void OnConnectionLostHandler()
-    {
-        _logger.UpdateLog("OnConnectionLost ");
-    }
+    #region -- Video Render UI Logic ---
 
-    public void OnMuteToggle(bool toggleState)
-    {
-        _mRtcEngine.MuteLocalAudioStream(toggleState);
-    }
-
-    private void DestroyVideoView(uint uid)
+    internal static void MakeVideoView(uint uid, string channelId = "")
     {
         GameObject go = GameObject.Find(uid.ToString());
-        if (go != null)
+        if (!ReferenceEquals(go, null))
+        {
+            return; // reuse
+        }
+
+        // create a GameObject and assign to this new user
+        VideoSurface videoSurface = makeImageSurface(uid.ToString());
+        if (!ReferenceEquals(videoSurface, null))
+        {
+            // configure videoSurface
+            if (uid == 0)
+            {
+                videoSurface.SetForUser(uid, channelId);
+            }
+            else
+            {
+                videoSurface.SetForUser(uid, channelId, VIDEO_SOURCE_TYPE.VIDEO_SOURCE_REMOTE);
+            }
+
+            videoSurface.OnTextureSizeModify += (int width, int height) =>
+            {
+                float scale = (float)height / (float)width;
+                videoSurface.transform.localScale = new Vector3(-5, 5 * scale, 1);
+                Debug.Log("OnTextureSizeModify: " + width + "  " + height);
+            };
+
+            videoSurface.SetEnable(true);
+        }
+    }
+
+    // VIDEO TYPE 1: 3D Object
+    private static VideoSurface MakePlaneSurface(string goName)
+    {
+        GameObject go = GameObject.CreatePrimitive(PrimitiveType.Plane);
+
+        if (go == null)
+        {
+            return null;
+        }
+
+        go.name = goName;
+        // set up transform
+        go.transform.Rotate(-90.0f, 0.0f, 0.0f);
+        go.transform.position = Vector3.zero;
+        go.transform.localScale = new Vector3(0.25f, 0.5f, .5f);
+
+        // configure videoSurface
+        VideoSurface videoSurface = go.AddComponent<VideoSurface>();
+        return videoSurface;
+    }
+
+    // Video TYPE 2: RawImage
+    private static VideoSurface makeImageSurface(string goName)
+    {
+        GameObject go = new GameObject();
+
+        if (go == null)
+        {
+            return null;
+        }
+
+        go.name = goName;
+        // to be renderered onto
+        go.AddComponent<RawImage>();
+        // make the object draggable
+        go.AddComponent<UIElementDrag>();
+        GameObject canvas = GameObject.Find("VideoCanvas");
+        if (canvas != null)
+        {
+            go.transform.parent = canvas.transform;
+            Debug.Log("add video view");
+        }
+        else
+        {
+            Debug.Log("Canvas is null video view");
+        }
+
+        // set up transform
+        go.transform.Rotate(0f, 0.0f, 180.0f);
+        go.transform.localPosition = Vector3.zero;
+        go.transform.localScale = new Vector3(3f, 4f, 1f);
+
+        // configure videoSurface
+        VideoSurface videoSurface = go.AddComponent<VideoSurface>();
+        return videoSurface;
+    }
+
+    internal static void DestroyVideoView(uint uid)
+    {
+        GameObject go = GameObject.Find(uid.ToString());
+        if (!ReferenceEquals(go, null))
         {
             Destroy(go);
         }
     }
 
-    private void MakeVideoView(uint uid)
+    #endregion
+}
+
+#region -- Agora Event ---
+
+internal class UserEventHandler : IRtcEngineEventHandler
+{
+    private readonly DemoVideoCall _customCaptureVideo;
+
+    internal UserEventHandler(DemoVideoCall customCaptureVideo)
     {
-        GameObject go = GameObject.Find(uid.ToString());
-        if (go != null)
-        {
-            return; // reuse
-        }
-        // configure videoSurface
-        VideoSurface videoSurface = CreateVideoSurface(uid.ToString());
-        videoSurface.SetForUser(uid);
-        videoSurface.SetVideoSurfaceType(AgoraVideoSurfaceType.RawImage);
-        videoSurface.videoFps = 30;
+        _customCaptureVideo = customCaptureVideo;
     }
 
-    private VideoSurface CreateVideoSurface(string uid)
+    public override void OnError(int err, string msg)
     {
-        GameObject go = new GameObject
-        {
-            name = uid
-        };
-        RawImage imageComponent = go.AddComponent<RawImage>();
-        imageComponent.rectTransform.sizeDelta = _cameraViewSize;
-        go.AddComponent<UIElementDrag>();
-        
-        go.transform.SetParent(_layout);
-        go.transform.Rotate(0f, 0.0f, 180.0f);
-        go.transform.localScale = Vector3.one;
-        
-        VideoSurface videoSurface = go.AddComponent<VideoSurface>();
-        return videoSurface;
+        _customCaptureVideo.Log.UpdateLog(string.Format("OnError err: {0}, msg: {1}", err, msg));
+    }
+
+    public override void OnJoinChannelSuccess(RtcConnection connection, int elapsed)
+    {
+        int build = 0;
+        _customCaptureVideo.Log.UpdateLog(string.Format("sdk version: ${0}",
+            _customCaptureVideo.RtcEngine.GetVersion(ref build)));
+        _customCaptureVideo.Log.UpdateLog(
+            string.Format("OnJoinChannelSuccess channelName: {0}, uid: {1}, elapsed: {2}",
+                connection.channelId, connection.localUid, elapsed));
+
+        //DemoVideoCall.MakeVideoView(0);
+    }
+
+    public override void OnRejoinChannelSuccess(RtcConnection connection, int elapsed)
+    {
+        _customCaptureVideo.Log.UpdateLog("OnRejoinChannelSuccess");
+    }
+
+    public override void OnLeaveChannel(RtcConnection connection, RtcStats stats)
+    {
+        _customCaptureVideo.Log.UpdateLog("OnLeaveChannel");
+    }
+
+    public override void OnClientRoleChanged(RtcConnection connection, CLIENT_ROLE_TYPE oldRole,
+        CLIENT_ROLE_TYPE newRole)
+    {
+        _customCaptureVideo.Log.UpdateLog("OnClientRoleChanged");
+    }
+
+    public override void OnUserJoined(RtcConnection connection, uint uid, int elapsed)
+    {
+        _customCaptureVideo.Log.UpdateLog(
+            string.Format("OnUserJoined uid: ${0} elapsed: ${1}", uid, elapsed));
+        DemoVideoCall.MakeVideoView(uid, _customCaptureVideo.GetChannelName());
+    }
+
+    public override void OnUserOffline(RtcConnection connection, uint uid, USER_OFFLINE_REASON_TYPE reason)
+    {
+        _customCaptureVideo.Log.UpdateLog(string.Format("OnUserOffLine uid: ${0}, reason: ${1}", uid,
+            (int)reason));
+        DemoVideoCall.DestroyVideoView(uid);
     }
 }
+
+#endregion
