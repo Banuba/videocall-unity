@@ -4,6 +4,7 @@ using UnityEngine.UI;
 using UnityEngine.Serialization;
 using Agora.Rtc;
 using Agora.Util;
+using Demo.Util;
 using Logger = Agora.Util.Logger;
 
 #if UNITY_2018_1_OR_NEWER
@@ -36,7 +37,9 @@ public class DemoVideoCall : MonoBehaviour
 
     [SerializeField]
     private BNB.RenderToTexture _renderToTexture;
-    private Texture2D _bufferTexture;
+    private byte[] _shareData;
+    private Texture2D _texture;
+    private Rect _rect;
 
 
     // Use this for initialization
@@ -45,10 +48,17 @@ public class DemoVideoCall : MonoBehaviour
         if (CheckAppId())
         {
             InitTextureIfRequired();
+            //InitTexture();
             InitEngine();
             SetExternalVideoSource();
             JoinChannel();
         }
+    }
+
+    private void InitTexture()
+    {
+        _rect = new UnityEngine.Rect(0, 0, Screen.width, Screen.height);
+        _texture = new Texture2D((int)_rect.width, (int)_rect.height, TextureFormat.RGBA32, false);
     }
 
     private void InitTextureIfRequired()
@@ -63,13 +73,20 @@ public class DemoVideoCall : MonoBehaviour
             return;
         }
 
-        if (_bufferTexture != null && (_bufferTexture.width != _renderToTexture.texture.width || _bufferTexture.height != _renderToTexture.texture.height))
+        if (_texture != null && (_texture.width != _renderToTexture.texture.width || _texture.height != _renderToTexture.texture.height))
         {
-            Destroy(_bufferTexture);
-            _bufferTexture = new Texture2D(_renderToTexture.texture.width, _renderToTexture.texture.height, TextureFormat.RGBA32, false);
+            Debug.Log("Recreeate");
+            Destroy(_texture);
+            _rect = new UnityEngine.Rect(0, 0, _renderToTexture.texture.width, _renderToTexture.texture.height);
+            _texture = new Texture2D((int)_rect.width, (int)_rect.height, TextureFormat.RGBA32, false);
             return;
         }
-        _bufferTexture = new Texture2D(_renderToTexture.texture.width, _renderToTexture.texture.height, TextureFormat.RGBA32, false);
+        if(_texture == null)
+        {
+            _rect = new UnityEngine.Rect(0, 0, 1, 1);
+            _texture = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+        }
+       
     }
 
     private void Update()
@@ -83,41 +100,43 @@ public class DemoVideoCall : MonoBehaviour
 
     }
 
-    private byte[] GetTextureData(RenderTexture renderTexture)
-    {
-        RenderTexture.active = renderTexture;
-        _bufferTexture.ReadPixels(new Rect(0, 0, renderTexture.width, renderTexture.height), 0, 0);
-        _bufferTexture.Apply();
-        RenderTexture.active = null;
-        return _bufferTexture.GetRawTextureData();
-    }
-
     private IEnumerator SendVideoFrame()
     {
         yield return new WaitForEndOfFrame();
-        InitTextureIfRequired();
         IRtcEngine rtc = Agora.Rtc.RtcEngine.Instance;
-        if (rtc == null) yield break;
+        if (rtc != null && _renderToTexture.texture != null)
+        {
+            InitTextureIfRequired();
+            RenderTexture.active = _renderToTexture.texture;
+            _texture.ReadPixels(_rect, 0, 0);
+            _texture.Apply();
+            RenderTexture.active = null;
 
-        byte[] bytes = GetTextureData(_renderToTexture.texture);
-        ExternalVideoFrame externalVideoFrame = new ExternalVideoFrame
-        {
-            type = VIDEO_BUFFER_TYPE.VIDEO_BUFFER_RAW_DATA,
-            format = VIDEO_PIXEL_FORMAT.VIDEO_PIXEL_RGBA,
-            buffer = bytes,
-            stride = _renderToTexture.texture.width,
-            height = _renderToTexture.texture.height,
-            cropLeft = 0,
-            cropTop = 0,
-            cropRight = 0,
-            cropBottom = 0,
-            rotation = 180,
-            timestamp = System.DateTime.Now.Ticks / 10000
-    };
-        var result = rtc.PushVideoFrame(externalVideoFrame);
-        if (result != 0)
-        {
-            Debug.Log("PushVideoFrame failure");
+#if UNITY_2018_1_OR_NEWER
+            NativeArray<byte> nativeByteArray = _texture.GetRawTextureData<byte>();
+            if (_shareData?.Length != nativeByteArray.Length)
+            {
+                _shareData = new byte[nativeByteArray.Length];
+            }
+            nativeByteArray.CopyTo(_shareData);
+#else
+                _shareData = _texture.GetRawTextureData();
+#endif
+
+            ExternalVideoFrame externalVideoFrame = new ExternalVideoFrame();
+            externalVideoFrame.type = VIDEO_BUFFER_TYPE.VIDEO_BUFFER_RAW_DATA;
+            externalVideoFrame.format = VIDEO_PIXEL_FORMAT.VIDEO_PIXEL_RGBA;
+            externalVideoFrame.buffer = _shareData;
+            externalVideoFrame.stride = (int)_rect.width;
+            externalVideoFrame.height = (int)_rect.height;
+            externalVideoFrame.cropLeft = 10;
+            externalVideoFrame.cropTop = 10;
+            externalVideoFrame.cropRight = 10;
+            externalVideoFrame.cropBottom = 10;
+            externalVideoFrame.rotation = 180;
+            externalVideoFrame.timestamp = System.DateTime.Now.Ticks / 10000;
+            var ret = rtc.PushVideoFrame(externalVideoFrame);
+            Debug.Log("PushVideoFrame ret = " + ret + "time: " + System.DateTime.Now.Millisecond);
         }
     }
 
@@ -236,7 +255,7 @@ public class DemoVideoCall : MonoBehaviour
         // to be renderered onto
         go.AddComponent<RawImage>();
         // make the object draggable
-        go.AddComponent<UIElementDrag>();
+        go.AddComponent<Demo.Util.UIElementDrag>();
         GameObject canvas = GameObject.Find("VideoCanvas");
         if (canvas != null)
         {
