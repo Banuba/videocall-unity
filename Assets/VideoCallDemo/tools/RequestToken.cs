@@ -3,9 +3,9 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.Networking;
 
-namespace Agora.Util
-{
 
+namespace Agora_RTC_Plugin.API_Example
+{
     [Serializable]
     public class TokenObject
     {

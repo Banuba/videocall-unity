@@ -3,9 +3,6 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Serialization;
 using Agora.Rtc;
-using Agora.Util;
-using Demo.Util;
-using Logger = Agora.Util.Logger;
 
 #if UNITY_2018_1_OR_NEWER
 using Unity.Collections;
@@ -14,7 +11,7 @@ using Unity.Collections;
 
 public class DemoVideoCall : MonoBehaviour 
 {
-    [Header("_____________Basic Configuration_____________")]
+    [Header("_____________Agora Configuration_____________")]
     [FormerlySerializedAs("APP_ID")]
     [SerializeField]
     private string _appID = "";
@@ -91,8 +88,14 @@ public class DemoVideoCall : MonoBehaviour
 
     private void Update()
     {
-        PermissionHelper.RequestMicrophontPermission();
-        StartCoroutine(SendVideoFrame());
+        //request microphone
+#if (UNITY_2018_3_OR_NEWER && UNITY_ANDROID)
+		if (!Permission.HasUserAuthorizedPermission(Permission.Microphone))
+		{                 
+			Permission.RequestUserPermission(Permission.Microphone);
+		}
+#endif
+    StartCoroutine(SendVideoFrame());
         if(_renderToTexture != null)
         {
             _localCameraView.texture = _renderToTexture.texture;
@@ -167,8 +170,15 @@ public class DemoVideoCall : MonoBehaviour
 
     private bool CheckAppId()
     {
-        Log = new Logger(LogText);
-        return Log.DebugAssert(_appID.Length > 10, "Please fill in your appId in Canvas!!!!");
+        //Log = new Logger(LogText);
+        //return Log.DebugAssert(_appID.Length > 10, "Please fill in your appId in Canvas!!!!");
+
+        if(_appID.Length < 10)
+        {
+            Debug.LogError("Please fill in your appId in Canvas!!!!");
+            return false;
+        }
+        return true;
     }
 
     private void OnDestroy()
@@ -302,15 +312,15 @@ internal class UserEventHandler : IRtcEngineEventHandler
 
     public override void OnError(int err, string msg)
     {
-        _customCaptureVideo.Log.UpdateLog(string.Format("OnError err: {0}, msg: {1}", err, msg));
+        Debug.Log(string.Format("OnError err: {0}, msg: {1}", err, msg));
     }
 
     public override void OnJoinChannelSuccess(RtcConnection connection, int elapsed)
     {
         int build = 0;
-        _customCaptureVideo.Log.UpdateLog(string.Format("sdk version: ${0}",
+        Debug.Log(string.Format("sdk version: ${0}",
             _customCaptureVideo.RtcEngine.GetVersion(ref build)));
-        _customCaptureVideo.Log.UpdateLog(
+        Debug.Log(
             string.Format("OnJoinChannelSuccess channelName: {0}, uid: {1}, elapsed: {2}",
                 connection.channelId, connection.localUid, elapsed));
 
@@ -319,30 +329,30 @@ internal class UserEventHandler : IRtcEngineEventHandler
 
     public override void OnRejoinChannelSuccess(RtcConnection connection, int elapsed)
     {
-        _customCaptureVideo.Log.UpdateLog("OnRejoinChannelSuccess");
+        Debug.Log("OnRejoinChannelSuccess");
     }
 
     public override void OnLeaveChannel(RtcConnection connection, RtcStats stats)
     {
-        _customCaptureVideo.Log.UpdateLog("OnLeaveChannel");
+        Debug.Log("OnLeaveChannel");
     }
 
     public override void OnClientRoleChanged(RtcConnection connection, CLIENT_ROLE_TYPE oldRole,
         CLIENT_ROLE_TYPE newRole, ClientRoleOptions newRoleOptions)
     {
-        _customCaptureVideo.Log.UpdateLog("OnClientRoleChanged");
+        Debug.Log("OnClientRoleChanged");
     }
 
     public override void OnUserJoined(RtcConnection connection, uint uid, int elapsed)
     {
-        _customCaptureVideo.Log.UpdateLog(
+        Debug.Log(
             string.Format("OnUserJoined uid: ${0} elapsed: ${1}", uid, elapsed));
         DemoVideoCall.MakeVideoView(uid, _customCaptureVideo.GetChannelName());
     }
 
     public override void OnUserOffline(RtcConnection connection, uint uid, USER_OFFLINE_REASON_TYPE reason)
     {
-        _customCaptureVideo.Log.UpdateLog(string.Format("OnUserOffLine uid: ${0}, reason: ${1}", uid,
+        Debug.Log(string.Format("OnUserOffLine uid: ${0}, reason: ${1}", uid,
             (int)reason));
         DemoVideoCall.DestroyVideoView(uid);
     }
