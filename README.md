@@ -7,7 +7,7 @@ The example of Banuba SDK and Agora.io SDK integration to enable augmented reali
 1) Get the client token for Banuba SDK. Please fill in our form on banuba.com website, or contact us via info@banuba.com. 
 2) Open the the project.
 3) Download and import the [Agora SDK package from Unity Asset Store](https://assetstore.unity.com/packages/tools/video/agora-video-sdk-for-unity-134502) with Unity Package Manager.
-4) Download and import the [BanubaSDK-vx.x.x-import.unitypackage](https://github.com/Banuba/quickstart-unity/releases)
+4) Download and import the [BanubaSDK-import.unitypackage](https://github.com/Banuba/quickstart-unity/releases)
 4) Visit agora.io to sign up and get token, app and channel ID.
 5) Find the Assets/Resources/BanubaClientToken.txt and past your client token here.
 6) Open the scene VideoCallDemo/demo/MainScene.scene.
